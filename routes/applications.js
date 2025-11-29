@@ -1,0 +1,10 @@
+﻿const express = require('express');
+const { createApplication, getApplications, getApplication, updateApplication, getStats } = require('../controllers/applicationController');
+const { auth } = require('../middleware/auth');
+const router = express.Router();
+router.post('/', createApplication);
+router.get('/', auth, getApplications);
+router.get('/stats', auth, getStats);
+router.get('/:id', auth, getApplication);
+router.put('/:id', auth, updateApplication);
+module.exports = router;

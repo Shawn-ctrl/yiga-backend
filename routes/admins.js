@@ -1,0 +1,10 @@
+﻿const express = require('express');
+const { getAdmins, createAdmin, updateAdmin, deleteAdmin } = require('../controllers/adminController');
+const { auth, requireSuperAdmin } = require('../middleware/auth');
+const router = express.Router();
+router.use(auth, requireSuperAdmin);
+router.get('/', getAdmins);
+router.post('/', createAdmin);
+router.put('/:id', updateAdmin);
+router.delete('/:id', deleteAdmin);
+module.exports = router;
