@@ -1,4 +1,4 @@
-﻿const express = require("express");
+﻿cconst express = require("express");
 const cors = require("cors");
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
@@ -123,42 +123,6 @@ app.post("/api/auth/login", async (req, res) => {
     }
 });
 
-// TEMPORARY - Remove after creating admin!
-app.post("/api/auth/setup-first-admin", async (req, res) => {
-    try {
-        const db = mongoose.connection.db;
-        const usersCollection = db.collection('users');
-        
-        // Check if admin exists
-        const existingAdmin = await usersCollection.findOne({ username: 'superadmin' });
-        if (existingAdmin) {
-            return res.json({ message: 'Admin already exists', username: 'superadmin' });
-        }
-        
-        // Hash password and insert
-        const hashedPassword = await bcrypt.hash('yiga2023', 12);
-        const result = await usersCollection.insertOne({
-            username: 'superadmin',
-            password: hashedPassword,
-            name: 'Super Administrator',
-            role: 'superadmin',
-            isActive: true,
-            createdAt: new Date(),
-            updatedAt: new Date()
-        });
-        
-        res.json({
-            message: 'Admin created successfully!',
-            username: 'superadmin',
-            password: 'yiga2023',
-            id: result.insertedId.toString()
-        });
-    } catch (error) {
-        console.error('Setup admin error:', error);
-        res.status(500).json({ message: error.message });
-    }
-});
-
 app.post("/api/applications", upload.single('resume'), async (req, res) => {
     try {
         const application = {
@@ -266,9 +230,9 @@ app.get("/api/files/:filename", auth, (req, res) => {
 app.get("/api/health", (req, res) => {
     res.json({ 
         message: "YIGA Production Backend is running!",
-        mode: "Enhanced Production (MongoDB + File uploads + Security)",
+        mode: "Production (MongoDB + File uploads + Security)",
         timestamp: new Date().toISOString(),
-        version: "2.0.0",
+        version: "2.0.1",
         applications: applications.length,
         features: ["MongoDB Auth", "File Uploads", "Security Headers", "Rate Limiting", "Admin Dashboard"]
     });
@@ -312,8 +276,8 @@ app.listen(PORT, () => {
     console.log("🚀 YIGA Production Backend running on port " + PORT);
     console.log("🛡️  Security: Enhanced with Helmet & Rate Limiting");
     console.log("💾 Database: MongoDB connected");
-    console.log("💾 File uploads: Enabled");
+    console.log("📁 File uploads: Enabled");
     console.log("📊 Sample applications loaded: " + applications.length);
-    console.log("🔑 Login with MongoDB admin after setup");
+    console.log("🔐 Secure authentication enabled");
     console.log("🌐 API: http://localhost:" + PORT);
 });
