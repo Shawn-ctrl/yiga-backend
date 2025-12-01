@@ -12,6 +12,9 @@ require("dotenv").config();
 
 const app = express();
 
+// Trust proxy for Railway
+app.set('trust proxy', 1);
+
 // Security middleware
 app.use(helmet());
 app.use(rateLimit({
@@ -29,8 +32,8 @@ if (!fs.existsSync('uploads')) {
     fs.mkdirSync('uploads');
 }
 
-// Connect to MongoDB - FIXED TO USE TEST DATABASE
-mongoose.connect('mongodb://mongo:DeMnepiuyvRbBOviDcTjaOywPCYiYDwK@tramway.proxy.rlwy.net:21045/test')
+// Connect to MongoDB - FIXED WITH authSource
+mongoose.connect('mongodb://mongo:DeMnepiuyvRbBOviDcTjaOywPCYiYDwK@tramway.proxy.rlwy.net:21045/test?authSource=admin')
     .then(() => console.log('✅ Connected to MongoDB'))
     .catch(err => console.error('❌ MongoDB connection error:', err));
 
@@ -110,12 +113,8 @@ app.post("/api/auth/login", async (req, res) => {
 
         res.json({
             token,
-            user: {
-                id: user._id,
-                username: user.username,
-                name: user.name,
-                role: user.role
-            }
+            username: user.username,
+            role: user.role
         });
     } catch (error) {
         console.error('Login error:', error);
@@ -149,64 +148,20 @@ app.post("/api/applications", upload.single('resume'), async (req, res) => {
 
 app.get("/api/applications", auth, async (req, res) => {
     try {
-        const { status, search } = req.query;
-        let filteredApplications = [...applications];
-        
-        if (status && status !== 'all') {
-            filteredApplications = filteredApplications.filter(app => app.status === status);
-        }
-        
-        if (search) {
-            filteredApplications = filteredApplications.filter(app => 
-                app.fullName.toLowerCase().includes(search.toLowerCase()) ||
-                app.email.toLowerCase().includes(search.toLowerCase()) ||
-                app.institution.toLowerCase().includes(search.toLowerCase())
-            );
-        }
-        
-        res.json({ 
-            applications: filteredApplications, 
-            total: filteredApplications.length 
-        });
+        res.json(applications);
     } catch (error) {
         console.error('Get applications error:', error);
         res.status(500).json({ message: 'Server error' });
     }
 });
 
-app.get("/api/applications/stats", auth, async (req, res) => {
-    try {
-        const total = applications.length;
-        const pending = applications.filter(a => a.status === 'pending').length;
-        const approved = applications.filter(a => a.status === 'approved').length;
-        const rejected = applications.filter(a => a.status === 'rejected').length;
-        
-        res.json({
-            total,
-            pending,
-            approved,
-            rejected,
-            recent: applications.filter(a => {
-                const daysAgo = (Date.now() - new Date(a.createdAt)) / (1000 * 60 * 60 * 24);
-                return daysAgo <= 30;
-            }).length
-        });
-    } catch (error) {
-        console.error('Get stats error:', error);
-        res.status(500).json({ message: 'Server error' });
-    }
-});
-
 app.put("/api/applications/:id", auth, async (req, res) => {
     try {
-        const { status, notes } = req.body;
+        const { status } = req.body;
         const application = applications.find(a => a.id == req.params.id);
         
         if (application) {
             application.status = status;
-            application.notes = notes;
-            application.reviewedBy = req.user.name;
-            application.reviewedAt = new Date().toISOString();
             res.json(application);
         } else {
             res.status(404).json({ message: 'Application not found' });
@@ -217,13 +172,18 @@ app.put("/api/applications/:id", auth, async (req, res) => {
     }
 });
 
-app.get("/api/files/:filename", auth, (req, res) => {
-    const filePath = path.join(__dirname, 'uploads', req.params.filename);
-    
-    if (fs.existsSync(filePath)) {
-        res.download(filePath);
-    } else {
-        res.status(404).json({ message: 'File not found' });
+app.delete("/api/applications/:id", auth, async (req, res) => {
+    try {
+        const index = applications.findIndex(a => a.id == req.params.id);
+        if (index > -1) {
+            applications.splice(index, 1);
+            res.json({ message: 'Application deleted' });
+        } else {
+            res.status(404).json({ message: 'Application not found' });
+        }
+    } catch (error) {
+        console.error('Delete application error:', error);
+        res.status(500).json({ message: 'Server error' });
     }
 });
 
@@ -242,31 +202,25 @@ app.get("/api/health", (req, res) => {
 applications = [
     {
         id: 1,
-        fullName: "John Smith",
+        full_name: "John Smith",
         email: "john.smith@example.com",
         phone: "+254700000001",
-        institution: "University of Nairobi",
-        position: "Student Leader",
-        interestArea: "foreign-policy",
-        experience: "3 years in student governance",
+        country: "Kenya",
+        program: "Foreign Policy",
         motivation: "I want to contribute to global policy discussions",
         status: "pending",
         createdAt: "2023-05-15T10:30:00.000Z"
     },
     {
         id: 2,
-        fullName: "Maria Garcia",
+        full_name: "Maria Garcia",
         email: "maria.garcia@example.com",
         phone: "+254700000002",
-        institution: "Kenyatta University",
-        position: "Climate Activist",
-        interestArea: "climate",
-        experience: "Climate activist with 2 years experience",
+        country: "Kenya",
+        program: "Climate Change",
         motivation: "Passionate about environmental justice",
         status: "approved",
-        createdAt: "2023-05-10T14:20:00.000Z",
-        reviewedBy: "Super Administrator",
-        reviewedAt: "2023-05-12T09:15:00.000Z"
+        createdAt: "2023-05-10T14:20:00.000Z"
     }
 ];
 
