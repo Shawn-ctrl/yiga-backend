@@ -8,106 +8,165 @@ const path = require("path");
 const fs = require("fs");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
-require("dotenv").config();
 
 const app = express();
+const PORT = process.env.PORT || 8080;
+
+// IMPORTANT: Trust Railway proxy BEFORE any other middleware
+app.set('trust proxy', 1);
 
 // Security middleware
 app.use(helmet());
-app.use(rateLimit({
+
+// Rate limiter configuration
+const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 100,
     standardHeaders: true,
-    legacyHeaders: false,
-    trustProxy: true // Trust Railway proxy
-}));
+    legacyHeaders: false
+});
+app.use(limiter);
 
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static('uploads'));
 
-// Ensure uploads directory exists
-if (!fs.existsSync('uploads')) {
-    fs.mkdirSync('uploads');
-}
+// MongoDB Connection
+const MONGO_URL = process.env.MONGO_URL || "mongodb://mongo:DeMnepiuyvRbBOviDcTjaOywPCYiYDwK@tramway.proxy.rlwy.net:21045";
+const JWT_SECRET = process.env.JWT_SECRET || "yiga_super_secret_jwt_key_2025_minimum_32_characters_long_for_security";
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGO_URL || process.env.DATABASE_URL)
-    .then(() => console.log('✅ Connected to MongoDB'))
-    .catch(err => console.error('❌ MongoDB connection error:', err));
+mongoose.connect(MONGO_URL, {
+    authSource: "admin",
+    serverSelectionTimeoutMS: 5000
+})
+.then(() => console.log("✅ Connected to MongoDB"))
+.catch((err) => console.error("❌ MongoDB connection error:", err));
 
-// Import User model (ONLY ONCE!)
+// User Model
 const User = require('./models/User');
 
-// Simple in-memory database for applications
-let applications = [];
-
-// File upload configuration
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'uploads/');
+// Application Model (MongoDB)
+const applicationSchema = new mongoose.Schema({
+    fullName: { type: String, required: true },
+    email: { type: String, required: true },
+    phone: { type: String, required: true },
+    institution: { type: String, required: true },
+    position: String,
+    interestArea: String,
+    experience: String,
+    motivation: String,
+    resume: String,
+    status: { 
+        type: String, 
+        enum: ['pending', 'approved', 'rejected'], 
+        default: 'pending' 
     },
+    reviewedBy: String,
+    reviewedAt: Date,
+    notes: String
+}, { timestamps: true });
+
+const Application = mongoose.model('Application', applicationSchema);
+
+// File upload setup
+const uploadDir = path.join(__dirname, "uploads");
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, uploadDir),
     filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, 'resume-' + uniqueSuffix + path.extname(file.originalname));
+        const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+        cb(null, "resume-" + uniqueSuffix + path.extname(file.originalname));
     }
 });
 
 const upload = multer({
-    storage: storage,
+    storage,
     limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
-        if (file.mimetype === 'application/pdf' || 
-            file.mimetype === 'application/msword' ||
-            file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-            cb(null, true);
-        } else {
-            cb(new Error('Only PDF and Word documents are allowed'), false);
-        }
+        const allowedTypes = /jpeg|jpg|png|pdf|doc|docx/;
+        const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+        const mimetype = allowedTypes.test(file.mimetype);
+        if (mimetype && extname) return cb(null, true);
+        cb(new Error("Invalid file type"));
     }
 });
 
-// Auth middleware
+// Authentication Middleware
 const auth = async (req, res, next) => {
     try {
-        const token = req.header('Authorization')?.replace('Bearer ', '');
-        if (!token) {
-            return res.status(401).json({ message: 'No token provided' });
-        }
+        const token = req.headers.authorization?.split(' ')[1];
+        if (!token) return res.status(401).json({ message: 'No token provided' });
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+        const decoded = jwt.verify(token, JWT_SECRET);
         const user = await User.findById(decoded.id);
         
         if (!user || !user.isActive) {
-            return res.status(401).json({ message: 'Invalid token' });
+            return res.status(401).json({ message: 'Invalid or inactive user' });
         }
-
+        
         req.user = user;
         next();
     } catch (error) {
+        console.error('Auth error:', error);
         res.status(401).json({ message: 'Invalid token' });
     }
 };
 
-// Routes
+// Super Admin Middleware
+const requireSuperAdmin = (req, res, next) => {
+    if (req.user.role !== 'superadmin') {
+        return res.status(403).json({ message: 'Super admin access required' });
+    }
+    next();
+};
+
+// Health Check
+app.get("/api/health", async (req, res) => {
+    try {
+        const appCount = await Application.countDocuments();
+        res.json({
+            message: "YIGA Production Backend is running!",
+            mode: "Production (MongoDB + File uploads + Security)",
+            timestamp: new Date(),
+            version: "2.0.3",
+            applications: appCount,
+            features: ["MongoDB Auth", "File Uploads", "Security Headers", "Rate Limiting", "Admin Dashboard"]
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Health check failed", error: error.message });
+    }
+});
+
+// ============================================
+// AUTH ROUTES
+// ============================================
+
 app.post("/api/auth/login", async (req, res) => {
     try {
         const { username, password } = req.body;
-        const user = await User.findOne({ username, isActive: true });
-
-        if (!user) {
-            return res.status(400).json({ message: 'Invalid credentials' });
+        
+        if (!username || !password) {
+            return res.status(400).json({ message: 'Username and password required' });
         }
 
-        const isMatch = await user.comparePassword(password);
-        if (!isMatch) {
-            return res.status(400).json({ message: 'Invalid credentials' });
+        const user = await User.findOne({ username });
+        
+        if (!user || !user.isActive) {
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
+
+        const isValidPassword = await user.comparePassword(password);
+        
+        if (!isValidPassword) {
+            return res.status(401).json({ message: 'Invalid credentials' });
         }
 
         const token = jwt.sign(
             { id: user._id, username: user.username, role: user.role },
-            process.env.JWT_SECRET || 'your-secret-key',
+            JWT_SECRET,
             { expiresIn: '24h' }
         );
 
@@ -126,88 +185,247 @@ app.post("/api/auth/login", async (req, res) => {
     }
 });
 
-// Admin Management Routes
-app.get("/api/admins", auth, async (req, res) => {
+app.get("/api/auth/me", auth, async (req, res) => {
+    res.json({
+        id: req.user._id,
+        username: req.user.username,
+        name: req.user.name,
+        role: req.user.role
+    });
+});
+
+// ============================================
+// APPLICATIONS ROUTES
+// ============================================
+
+// Get all applications (with filtering)
+app.get("/api/applications", auth, async (req, res) => {
     try {
-        if (req.user.role !== 'superadmin') {
-            return res.status(403).json({ message: 'Access denied' });
+        const { status, search } = req.query;
+        let query = {};
+
+        if (status && status !== 'all') {
+            query.status = status;
         }
 
-        const admins = await User.find({}, '-password');
-        res.json({ admins });
+        if (search) {
+            query.$or = [
+                { fullName: { $regex: search, $options: 'i' } },
+                { email: { $regex: search, $options: 'i' } },
+                { institution: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        const applications = await Application.find(query).sort({ createdAt: -1 });
+
+        res.json({
+            applications,
+            total: applications.length
+        });
     } catch (error) {
-        console.error('Get admins error:', error);
+        console.error('Error fetching applications:', error);
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+});
+
+// Get single application
+app.get("/api/applications/:id", auth, async (req, res) => {
+    try {
+        const application = await Application.findById(req.params.id);
+        
+        if (!application) {
+            return res.status(404).json({ message: 'Application not found' });
+        }
+
+        res.json(application);
+    } catch (error) {
+        console.error('Error fetching application:', error);
         res.status(500).json({ message: 'Server error' });
     }
 });
 
-app.post("/api/admins", auth, async (req, res) => {
+// Create application (public endpoint for students)
+app.post("/api/applications", upload.single('resume'), async (req, res) => {
     try {
-        if (req.user.role !== 'superadmin') {
-            return res.status(403).json({ message: 'Access denied' });
+        const { fullName, email, phone, institution, position, interestArea, experience, motivation } = req.body;
+
+        const application = new Application({
+            fullName,
+            email,
+            phone,
+            institution,
+            position,
+            interestArea,
+            experience,
+            motivation,
+            resume: req.file ? req.file.filename : null
+        });
+
+        await application.save();
+
+        res.status(201).json({
+            message: 'Application submitted successfully',
+            application
+        });
+    } catch (error) {
+        console.error('Error creating application:', error);
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+});
+
+// Update application status
+app.put("/api/applications/:id", auth, async (req, res) => {
+    try {
+        const { status, notes } = req.body;
+
+        const application = await Application.findByIdAndUpdate(
+            req.params.id,
+            {
+                status,
+                notes,
+                reviewedAt: new Date(),
+                reviewedBy: req.user.name
+            },
+            { new: true }
+        );
+
+        if (!application) {
+            return res.status(404).json({ message: 'Application not found' });
         }
 
+        res.json(application);
+    } catch (error) {
+        console.error('Error updating application:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Delete application
+app.delete("/api/applications/:id", auth, async (req, res) => {
+    try {
+        const application = await Application.findByIdAndDelete(req.params.id);
+        
+        if (!application) {
+            return res.status(404).json({ message: 'Application not found' });
+        }
+
+        // Delete associated file
+        if (application.resume) {
+            const filepath = path.join(uploadDir, application.resume);
+            if (fs.existsSync(filepath)) {
+                fs.unlinkSync(filepath);
+            }
+        }
+
+        res.json({ message: 'Application deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting application:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Get application statistics
+app.get("/api/applications/stats/summary", auth, async (req, res) => {
+    try {
+        const total = await Application.countDocuments();
+        const pending = await Application.countDocuments({ status: 'pending' });
+        const approved = await Application.countDocuments({ status: 'approved' });
+        const rejected = await Application.countDocuments({ status: 'rejected' });
+
+        res.json({
+            total,
+            pending,
+            approved,
+            rejected
+        });
+    } catch (error) {
+        console.error('Error fetching stats:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// ============================================
+// ADMIN MANAGEMENT ROUTES
+// ============================================
+
+// Get all admins (super admin only)
+app.get("/api/admins", auth, requireSuperAdmin, async (req, res) => {
+    try {
+        const admins = await User.find()
+            .select('-password')
+            .sort({ createdAt: -1 });
+        
+        res.json({ admins });
+    } catch (error) {
+        console.error('Error fetching admins:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Create new admin (super admin only)
+app.post("/api/admins", auth, requireSuperAdmin, async (req, res) => {
+    try {
         const { username, password, name, role } = req.body;
+
+        if (!username || !password || !name) {
+            return res.status(400).json({ 
+                message: 'Username, password, and name are required' 
+            });
+        }
 
         const existingUser = await User.findOne({ username });
         if (existingUser) {
-            return res.status(400).json({ message: 'Username already exists' });
+            return res.status(400).json({ 
+                message: 'Username already exists' 
+            });
         }
 
-        const admin = new User({
+        if (password.length < 6) {
+            return res.status(400).json({ 
+                message: 'Password must be at least 6 characters' 
+            });
+        }
+
+        const newAdmin = new User({
             username,
-            password, // Will be hashed by pre-save hook
+            password,
             name,
             role: role || 'admin',
             isActive: true
         });
 
-        await admin.save();
+        await newAdmin.save();
 
         res.status(201).json({
             message: 'Admin created successfully',
             admin: {
-                id: admin._id,
-                username: admin.username,
-                name: admin.name,
-                role: admin.role
+                id: newAdmin._id,
+                username: newAdmin.username,
+                name: newAdmin.name,
+                role: newAdmin.role,
+                isActive: newAdmin.isActive
             }
         });
     } catch (error) {
-        console.error('Create admin error:', error);
-        res.status(500).json({ message: 'Server error' });
+        console.error('Error creating admin:', error);
+        res.status(500).json({ 
+            message: 'Server error', 
+            error: error.message 
+        });
     }
 });
 
-app.delete("/api/admins/:id", auth, async (req, res) => {
+// Toggle admin active status
+app.put("/api/admins/:id/toggle", auth, requireSuperAdmin, async (req, res) => {
     try {
-        if (req.user.role !== 'superadmin') {
-            return res.status(403).json({ message: 'Access denied' });
-        }
-
         if (req.params.id === req.user._id.toString()) {
-            return res.status(400).json({ message: 'Cannot delete your own account' });
-        }
-
-        await User.findByIdAndDelete(req.params.id);
-        res.json({ message: 'Admin deleted successfully' });
-    } catch (error) {
-        console.error('Delete admin error:', error);
-        res.status(500).json({ message: 'Server error' });
-    }
-});
-
-app.put("/api/admins/:id/toggle", auth, async (req, res) => {
-    try {
-        if (req.user.role !== 'superadmin') {
-            return res.status(403).json({ message: 'Access denied' });
-        }
-
-        if (req.params.id === req.user._id.toString()) {
-            return res.status(400).json({ message: 'Cannot deactivate your own account' });
+            return res.status(400).json({ 
+                message: 'Cannot disable your own account' 
+            });
         }
 
         const admin = await User.findById(req.params.id);
+        
         if (!admin) {
             return res.status(404).json({ message: 'Admin not found' });
         }
@@ -216,7 +434,7 @@ app.put("/api/admins/:id/toggle", auth, async (req, res) => {
         await admin.save();
 
         res.json({
-            message: 'Admin status updated',
+            message: `Admin ${admin.isActive ? 'activated' : 'deactivated'} successfully`,
             admin: {
                 id: admin._id,
                 username: admin.username,
@@ -226,134 +444,43 @@ app.put("/api/admins/:id/toggle", auth, async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('Toggle admin error:', error);
+        console.error('Error toggling admin:', error);
         res.status(500).json({ message: 'Server error' });
     }
 });
 
-// Application Routes
-app.post("/api/applications", upload.single('resume'), async (req, res) => {
+// Delete admin
+app.delete("/api/admins/:id", auth, requireSuperAdmin, async (req, res) => {
     try {
-        const application = {
-            id: applications.length + 1,
-            ...req.body,
-            resume: req.file ? req.file.filename : null,
-            status: 'pending',
-            createdAt: new Date().toISOString()
-        };
+        if (req.params.id === req.user._id.toString()) {
+            return res.status(400).json({ 
+                message: 'Cannot delete your own account' 
+            });
+        }
 
-        applications.push(application);
-        res.status(201).json({ 
-            message: 'Application submitted successfully', 
-            application 
-        });
-    } catch (error) {
-        console.error('Application submission error:', error);
-        if (req.file) {
-            fs.unlinkSync(req.file.path);
+        const admin = await User.findByIdAndDelete(req.params.id);
+        
+        if (!admin) {
+            return res.status(404).json({ message: 'Admin not found' });
         }
-        res.status(500).json({ message: 'Server error' });
-    }
-});
 
-app.get("/api/applications", auth, async (req, res) => {
-    try {
-        const { status, search } = req.query;
-        let filteredApplications = [...applications];
-        
-        if (status && status !== 'all') {
-            filteredApplications = filteredApplications.filter(app => app.status === status);
-        }
-        
-        if (search) {
-            filteredApplications = filteredApplications.filter(app => 
-                app.fullName.toLowerCase().includes(search.toLowerCase()) ||
-                app.email.toLowerCase().includes(search.toLowerCase()) ||
-                app.institution.toLowerCase().includes(search.toLowerCase())
-            );
-        }
-        
         res.json({ 
-            applications: filteredApplications, 
-            total: filteredApplications.length 
+            message: 'Admin deleted successfully'
         });
     } catch (error) {
-        console.error('Get applications error:', error);
+        console.error('Error deleting admin:', error);
         res.status(500).json({ message: 'Server error' });
     }
 });
 
-app.get("/api/applications/stats", auth, async (req, res) => {
-    try {
-        const total = applications.length;
-        const pending = applications.filter(a => a.status === 'pending').length;
-        const approved = applications.filter(a => a.status === 'approved').length;
-        const rejected = applications.filter(a => a.status === 'rejected').length;
-        
-        res.json({
-            total,
-            pending,
-            approved,
-            rejected,
-            recent: applications.filter(a => {
-                const daysAgo = (Date.now() - new Date(a.createdAt)) / (1000 * 60 * 60 * 24);
-                return daysAgo <= 30;
-            }).length
-        });
-    } catch (error) {
-        console.error('Get stats error:', error);
-        res.status(500).json({ message: 'Server error' });
-    }
-});
+// ============================================
+// FILE SERVING
+// ============================================
 
-app.put("/api/applications/:id", auth, async (req, res) => {
-    try {
-        const { status, notes } = req.body;
-        const application = applications.find(a => a.id == req.params.id);
-        
-        if (application) {
-            application.status = status;
-            application.notes = notes;
-            application.reviewedBy = req.user.name;
-            application.reviewedAt = new Date().toISOString();
-            res.json(application);
-        } else {
-            res.status(404).json({ message: 'Application not found' });
-        }
-    } catch (error) {
-        console.error('Update application error:', error);
-        res.status(500).json({ message: 'Server error' });
-    }
-});
-
-app.delete("/api/applications/:id", auth, async (req, res) => {
-    try {
-        const index = applications.findIndex(a => a.id == req.params.id);
-        
-        if (index !== -1) {
-            const application = applications[index];
-            
-            // Delete resume file if exists
-            if (application.resume) {
-                const filePath = path.join(__dirname, 'uploads', application.resume);
-                if (fs.existsSync(filePath)) {
-                    fs.unlinkSync(filePath);
-                }
-            }
-            
-            applications.splice(index, 1);
-            res.json({ message: 'Application deleted successfully' });
-        } else {
-            res.status(404).json({ message: 'Application not found' });
-        }
-    } catch (error) {
-        console.error('Delete application error:', error);
-        res.status(500).json({ message: 'Server error' });
-    }
-});
+app.use("/api/uploads", express.static(uploadDir));
 
 app.get("/api/files/:filename", auth, (req, res) => {
-    const filePath = path.join(__dirname, 'uploads', req.params.filename);
+    const filePath = path.join(uploadDir, req.params.filename);
     
     if (fs.existsSync(filePath)) {
         res.download(filePath);
@@ -362,57 +489,61 @@ app.get("/api/files/:filename", auth, (req, res) => {
     }
 });
 
-app.get("/api/health", (req, res) => {
-    res.json({ 
-        message: "YIGA Production Backend is running!",
-        mode: "Production (MongoDB + File uploads + Security)",
-        timestamp: new Date().toISOString(),
-        version: "2.0.2",
-        applications: applications.length,
-        features: ["MongoDB Auth", "File Uploads", "Security Headers", "Rate Limiting", "Admin Dashboard"]
-    });
-});
-
-// Add sample data for demo
-applications = [
-    {
-        id: 1,
-        fullName: "John Smith",
-        email: "john.smith@example.com",
-        phone: "+254700000001",
-        institution: "University of Nairobi",
-        position: "Student Leader",
-        interestArea: "foreign-policy",
-        experience: "3 years in student governance",
-        motivation: "I want to contribute to global policy discussions",
-        status: "pending",
-        createdAt: "2023-05-15T10:30:00.000Z"
-    },
-    {
-        id: 2,
-        fullName: "Maria Garcia",
-        email: "maria.garcia@example.com",
-        phone: "+254700000002",
-        institution: "Kenyatta University",
-        position: "Climate Activist",
-        interestArea: "climate",
-        experience: "Climate activist with 2 years experience",
-        motivation: "Passionate about environmental justice",
-        status: "approved",
-        createdAt: "2023-05-10T14:20:00.000Z",
-        reviewedBy: "Super Administrator",
-        reviewedAt: "2023-05-12T09:15:00.000Z"
-    }
-];
-
-const PORT = process.env.PORT || 5000;
+// ============================================
+// START SERVER
+// ============================================
 
 app.listen(PORT, () => {
-    console.log("🚀 YIGA Production Backend running on port " + PORT);
-    console.log("🛡️  Security: Enhanced with Helmet & Rate Limiting");
-    console.log("💾 Database: MongoDB connected");
-    console.log("📁 File uploads: Enabled");
-    console.log("📊 Sample applications loaded: " + applications.length);
-    console.log("🔐 Secure authentication enabled");
-    console.log("🌐 API: http://localhost:" + PORT);
+    console.log(`🚀 YIGA Production Backend running on port ${PORT}`);
+    console.log(`🛡️  Security: Enhanced with Helmet & Rate Limiting`);
+    console.log(`💾 Database: MongoDB connected`);
+    console.log(`📁 File uploads: Enabled`);
+    console.log(`🔐 Secure authentication enabled`);
+    console.log(`🌐 API: http://localhost:${PORT}`);
+    
+    // Seed sample applications on startup (only if none exist)
+    Application.countDocuments().then(count => {
+        if (count === 0) {
+            const sampleApps = [
+                {
+                    fullName: "John Smith",
+                    email: "john.smith@example.com",
+                    phone: "+254700000001",
+                    institution: "University of Nairobi",
+                    position: "Student Leader",
+                    interestArea: "foreign-policy",
+                    experience: "3 years in student governance",
+                    motivation: "I want to contribute to global policy discussions",
+                    status: "pending"
+                },
+                {
+                    fullName: "Maria Garcia",
+                    email: "maria.garcia@example.com",
+                    phone: "+254700000002",
+                    institution: "Kenyatta University",
+                    position: "Climate Activist",
+                    interestArea: "climate",
+                    experience: "Climate activist with 2 years experience",
+                    motivation: "Passionate about environmental justice",
+                    status: "approved",
+                    reviewedBy: "Super Administrator"
+                },
+                {
+                    fullName: "David Chen",
+                    email: "david.chen@example.com",
+                    phone: "+254700000003",
+                    institution: "Strathmore University",
+                    position: "Research Assistant",
+                    interestArea: "technology",
+                    experience: "AI research and development",
+                    motivation: "Building tech solutions for Africa",
+                    status: "pending"
+                }
+            ];
+            
+            Application.insertMany(sampleApps)
+                .then(() => console.log(`📊 Sample applications loaded: ${sampleApps.length}`))
+                .catch(err => console.error('Error loading sample apps:', err));
+        }
+    });
 });
