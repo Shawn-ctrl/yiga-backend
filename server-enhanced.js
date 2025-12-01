@@ -29,8 +29,8 @@ if (!fs.existsSync('uploads')) {
     fs.mkdirSync('uploads');
 }
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGO_URL || process.env.DATABASE_URL)
+// Connect to MongoDB - FIXED TO USE TEST DATABASE
+mongoose.connect('mongodb://mongo:DeMnepiuyvRbBOviDcTjaOywPCYiYDwK@tramway.proxy.rlwy.net:21045/test')
     .then(() => console.log('✅ Connected to MongoDB'))
     .catch(err => console.error('❌ MongoDB connection error:', err));
 
