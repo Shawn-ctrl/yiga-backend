@@ -1,34 +1,44 @@
-const express = require('express');
-const { login, getProfile } = require('../controllers/authController');
-const { auth } = require('../middleware/auth');
+﻿const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-const Admin = require('../models/Admin'); // Adjust path if needed
-const router = express.Router();
+require('dotenv').config();
 
-router.post('/login', login);
-router.get('/profile', auth, getProfile);
-
-// CREATE FIRST ADMIN (remove this route after creating admin!)
-router.post('/create-first-admin', async (req, res) => {
+async function createAdmin() {
   try {
-    // Check if any admin exists
-    const adminExists = await Admin.findOne();
-    if (adminExists) {
-      return res.status(400).json({ message: 'Admin already exists' });
-    }
-
-    const hashedPassword = await bcrypt.hash('superadmin123', 10);
-    const admin = new Admin({
+    await mongoose.connect(process.env.MONGO_URL);
+    console.log('Connected to MongoDB');
+    
+    const db = mongoose.connection.db;
+    const usersCollection = db.collection('users');
+    
+    // Delete existing superadmin
+    await usersCollection.deleteOne({ username: 'superadmin' });
+    console.log('Deleted old admin if existed');
+    
+    // Hash password manually
+    const hashedPassword = await bcrypt.hash('yiga2023', 12);
+    
+    // Insert directly into collection
+    const result = await usersCollection.insertOne({
       username: 'superadmin',
       password: hashedPassword,
-      role: 'superadmin'
+      name: 'Super Administrator',
+      role: 'superadmin',
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date()
     });
-
-    await admin.save();
-    res.json({ message: 'Admin created successfully!', username: 'superadmin' });
+    
+    console.log('✅ Admin created successfully!');
+    console.log('Username: superadmin');
+    console.log('Password: yiga2023');
+    console.log('Document ID:', result.insertedId);
+    
+    mongoose.connection.close();
+    process.exit(0);
   } catch (error) {
-    res.status(500).json({ message: 'Error creating admin', error: error.message });
+    console.error('Error:', error);
+    process.exit(1);
   }
-});
+}
 
-module.exports = router;
+createAdmin();
