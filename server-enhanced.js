@@ -29,34 +29,16 @@ if (!fs.existsSync('uploads')) {
     fs.mkdirSync('uploads');
 }
 
-// Simple in-memory database for demo (no MongoDB required)
+// Connect to MongoDB
+mongoose.connect(process.env.MONGO_URL || process.env.DATABASE_URL)
+    .then(() => console.log('✅ Connected to MongoDB'))
+    .catch(err => console.error('❌ MongoDB connection error:', err));
+
+// Import User model
+const User = require('./models/User');
+
+// Simple in-memory database for applications (you can migrate this to MongoDB later)
 let applications = [];
-let admins = [
-    { 
-        id: 1, 
-        username: "superadmin", 
-        password: "$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdC4SJc8EkzQOLa", // yiga2023
-        name: "Super Administrator", 
-        role: "superadmin",
-        email: "admin@yiga.org"
-    },
-    { 
-        id: 2, 
-        username: "admin", 
-        password: "$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdC4SJc8EkzQOLa", // yiga2023
-        name: "Administrator", 
-        role: "admin",
-        email: "admin@yiga.org"
-    },
-    { 
-        id: 3, 
-        username: "director", 
-        password: "$2a$12$8S7.6V9mYbHwRcXpNqjRv.1V2KkL9mMxPwQzTfYbGcN3hJvWqLrOa", // program123
-        name: "Program Director", 
-        role: "admin",
-        email: "programs@yiga.org"
-    }
-];
 
 // File upload configuration
 const storage = multer.diskStorage({
@@ -91,11 +73,10 @@ const auth = async (req, res, next) => {
             return res.status(401).json({ message: 'No token provided' });
         }
 
-        // Simple token verification (in production, use JWT properly)
-        const adminId = parseInt(token.replace('demo-token-', ''));
-        const user = admins.find(a => a.id === adminId);
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+        const user = await User.findById(decoded.id);
         
-        if (!user) {
+        if (!user || !user.isActive) {
             return res.status(401).json({ message: 'Invalid token' });
         }
 
@@ -110,23 +91,27 @@ const auth = async (req, res, next) => {
 app.post("/api/auth/login", async (req, res) => {
     try {
         const { username, password } = req.body;
-        const user = admins.find(a => a.username === username);
+        const user = await User.findOne({ username, isActive: true });
 
         if (!user) {
             return res.status(400).json({ message: 'Invalid credentials' });
         }
 
-        // Simple password check (in production, use bcrypt.compare)
-        const isMatch = await bcrypt.compare(password, user.password);
+        const isMatch = await user.comparePassword(password);
         if (!isMatch) {
             return res.status(400).json({ message: 'Invalid credentials' });
         }
 
-        const token = "demo-token-" + user.id;
+        const token = jwt.sign(
+            { id: user._id, username: user.username, role: user.role },
+            process.env.JWT_SECRET || 'your-secret-key',
+            { expiresIn: '24h' }
+        );
+
         res.json({
             token,
             user: {
-                id: user.id,
+                id: user._id,
                 username: user.username,
                 name: user.name,
                 role: user.role
@@ -135,6 +120,42 @@ app.post("/api/auth/login", async (req, res) => {
     } catch (error) {
         console.error('Login error:', error);
         res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// TEMPORARY - Remove after creating admin!
+app.post("/api/auth/setup-first-admin", async (req, res) => {
+    try {
+        const db = mongoose.connection.db;
+        const usersCollection = db.collection('users');
+        
+        // Check if admin exists
+        const existingAdmin = await usersCollection.findOne({ username: 'superadmin' });
+        if (existingAdmin) {
+            return res.json({ message: 'Admin already exists', username: 'superadmin' });
+        }
+        
+        // Hash password and insert
+        const hashedPassword = await bcrypt.hash('yiga2023', 12);
+        const result = await usersCollection.insertOne({
+            username: 'superadmin',
+            password: hashedPassword,
+            name: 'Super Administrator',
+            role: 'superadmin',
+            isActive: true,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        });
+        
+        res.json({
+            message: 'Admin created successfully!',
+            username: 'superadmin',
+            password: 'yiga2023',
+            id: result.insertedId.toString()
+        });
+    } catch (error) {
+        console.error('Setup admin error:', error);
+        res.status(500).json({ message: error.message });
     }
 });
 
@@ -245,11 +266,11 @@ app.get("/api/files/:filename", auth, (req, res) => {
 app.get("/api/health", (req, res) => {
     res.json({ 
         message: "YIGA Production Backend is running!",
-        mode: "Enhanced Production (File uploads + Security)",
+        mode: "Enhanced Production (MongoDB + File uploads + Security)",
         timestamp: new Date().toISOString(),
         version: "2.0.0",
         applications: applications.length,
-        features: ["File Uploads", "Security Headers", "Rate Limiting", "Admin Dashboard"]
+        features: ["MongoDB Auth", "File Uploads", "Security Headers", "Rate Limiting", "Admin Dashboard"]
     });
 });
 
@@ -290,10 +311,9 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log("🚀 YIGA Production Backend running on port " + PORT);
     console.log("🛡️  Security: Enhanced with Helmet & Rate Limiting");
+    console.log("💾 Database: MongoDB connected");
     console.log("💾 File uploads: Enabled");
     console.log("📊 Sample applications loaded: " + applications.length);
-    console.log("🔑 Super Admin: superadmin / yiga2023");
-    console.log("🔑 Admin: admin / yiga2023");
-    console.log("🔑 Program Director: director / program123");
+    console.log("🔑 Login with MongoDB admin after setup");
     console.log("🌐 API: http://localhost:" + PORT);
 });
