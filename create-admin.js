@@ -1,45 +1,38 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
+require('dotenv').config();
 
-const userSchema = new mongoose.Schema({
-    username: { type: String, required: true, unique: true },
-    password: { type: String, required: true },
-    name: String,
-    role: { type: String, enum: ['user', 'admin', 'superadmin'], default: 'user' }
-});
-
-const User = mongoose.model('User', userSchema);
+// Import the actual User model from the backend
+const User = require('./models/User');
 
 async function createAdmin() {
     try {
         await mongoose.connect('mongodb://mongo:DeMnepiuyvRbBOviDcTjaOywPCYiYDwK@tramway.proxy.rlwy.net:21045/test?authSource=admin');
         
-        console.log('Connected to MongoDB');
+        console.log('✅ Connected to MongoDB');
         
-        const existing = await User.findOne({ username: 'superadmin' });
-        if (existing) {
-            console.log('Admin already exists - deleting and recreating...');
-            await User.deleteOne({ username: 'superadmin' });
-        }
+        // Delete existing admin
+        await User.deleteMany({ username: 'superadmin' });
+        console.log('🗑️  Deleted old admin');
         
-        const hashedPassword = await bcrypt.hash('yiga2023', 10);
-        
-        const admin = await User.create({
+        // Create new admin - the User model will hash the password automatically
+        const admin = new User({
             username: 'superadmin',
-            password: hashedPassword,
+            password: 'yiga2023',
             name: 'Super Administrator',
-            role: 'superadmin'
+            role: 'superadmin',
+            isActive: true
         });
         
-        console.log('SUCCESS! Admin user created:');
+        await admin.save();
+        
+        console.log('✅ SUCCESS! Admin created');
         console.log('Username: superadmin');
         console.log('Password: yiga2023');
-        console.log('User ID:', admin._id);
         
         await mongoose.connection.close();
         process.exit(0);
     } catch (error) {
-        console.error('Error:', error.message);
+        console.error('❌ Error:', error.message);
         process.exit(1);
     }
 }
