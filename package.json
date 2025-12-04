@@ -1,6 +1,6 @@
 {
     "name":  "yiga-backend",
-    "version":  "2.0.0",
+    "version":  "1.0.2025-12-04-140503",
     "description":  "YIGA Production Backend",
     "main":  "server-enhanced.js",
     "scripts":  {
