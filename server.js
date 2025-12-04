@@ -13,7 +13,13 @@ let applications = [];
 let admins = [
   { id: 1, username: "superadmin", password: "Yiga2023", name: "Super Admin", role: "superadmin" },
   { id: 2, username: "admin", password: "yiga2023", name: "Admin User", role: "admin" },
-  { id: 3, username: "director", password: "program123", name: "Program Director", role: "admin" }
+  { id: 3, username: "director", password: "program123", name: "Program Director", role: "admin" },
+  { id: 4, username: "jeremy.oronje", password: "Jeremy@2024!", name: "Jeremy Oronje", role: "superadmin" },
+  { id: 5, username: "phoebe.monari", password: "Phoebe@2024!", name: "Phoebe Monari", role: "superadmin" },
+  { id: 6, username: "catherine.mbilo", password: "Catherine@2024!", name: "Catherine Mbilo", role: "admin" },
+  { id: 7, username: "hilda.koipano", password: "Hilda@2024!", name: "Hilda Koipano", role: "admin" },
+  { id: 8, username: "abel.omenge", password: "Abel@2024!", name: "Abel Omenge", role: "admin" },
+  { id: 9, username: "beldine.mukami", password: "Beldine@2024!", name: "Beldine Mukami", role: "admin" }
 ];
 
 // Auth routes
