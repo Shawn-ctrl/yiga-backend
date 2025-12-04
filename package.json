@@ -4,11 +4,11 @@
     "description":  "YIGA Production Backend",
     "main":  "server-enhanced.js",
     "scripts":  {
-                    "start":  "node server-enhanced.js",
                     "dev":  "nodemon server-enhanced.js",
                     "production":  "node server-enhanced.js",
                     "pm2":  "pm2 start server-enhanced.js --name yiga-backend",
-                    "postinstall":  "echo \u0027Build timestamp: 2025-12-04-102007\u0027"
+                    "postinstall":  "echo \u0027Build timestamp: 2025-12-04-102007\u0027",
+                    "start":  "node server.js"
                 },
     "dependencies":  {
                          "bcryptjs":  "^2.4.3",
