@@ -27,6 +27,35 @@ let admins = [
 ];
 
 // Auth routes
+
+// Authentication middleware
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: "Access token required" });
+  }
+
+  // In demo mode, extract user ID from token
+  // Token format: "demo-token-{userId}"
+  const userId = parseInt(token.replace('demo-token-', ''));
+  const user = admins.find(a => a.id === userId);
+
+  if (!user) {
+    return res.status(403).json({ error: "Invalid token" });
+  }
+
+  req.user = {
+    id: user.id,
+    username: user.username,
+    name: user.name,
+    role: user.role
+  };
+
+  next();
+}
+
 app.post("/api/auth/login", (req, res) => {
   const { username, password } = req.body;
   const admin = admins.find(a => a.username === username && a.password === password);
