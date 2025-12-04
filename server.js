@@ -217,6 +217,50 @@ app.listen(PORT, () => {
 });
 
 
+
+// Dashboard statistics
+app.get("/api/stats", authenticateToken, (req, res) => {
+  try {
+    const stats = {
+      totalApplications: applications.length,
+      pendingApplications: applications.filter(app => app.status === "pending").length,
+      approvedApplications: applications.filter(app => app.status === "approved").length,
+      rejectedApplications: applications.filter(app => app.status === "rejected").length,
+      totalAdmins: admins.length,
+      recentApplications: applications.slice(-5).reverse()
+    };
+    
+    res.json(stats);
+  } catch (error) {
+    console.error("Stats error:", error);
+    res.status(500).json({ error: "Failed to fetch statistics" });
+  }
+});
+
+
+// Users endpoint (alias for admins list)
+app.get("/api/users", authenticateToken, (req, res) => {
+  try {
+    // Only superadmins can see all users
+    if (req.user.role !== "superadmin") {
+      return res.status(403).json({ error: "Access denied. Superadmin only." });
+    }
+    
+    // Return admins without passwords
+    const users = admins.map(admin => ({
+      id: admin.id,
+      username: admin.username,
+      name: admin.name,
+      role: admin.role
+    }));
+    
+    res.json(users);
+  } catch (error) {
+    console.error("Users error:", error);
+    res.status(500).json({ error: "Failed to fetch users" });
+  }
+});
+
 // Newsletter subscription
 app.post("/api/subscribe", async (req, res) => {
   try {
