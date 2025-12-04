@@ -19,7 +19,8 @@ let admins = [
   { id: 6, username: "catherine.mbilo", password: "Catherine@2024!", name: "Catherine Mbilo", role: "admin" },
   { id: 7, username: "hilda.koipano", password: "Hilda@2024!", name: "Hilda Koipano", role: "admin" },
   { id: 8, username: "abel.omenge", password: "Abel@2024!", name: "Abel Omenge", role: "admin" },
-  { id: 9, username: "beldine.mukami", password: "Beldine@2024!", name: "Beldine Mukami", role: "admin" }
+  { id: 9, username: "beldine.mukami", password: "Beldine@2024!", name: "Beldine Mukami", role: "admin" },
+  { id: 10, username: "Shawn", password: "Yiga2023", name: "Shawn Ndombi", role: "superadmin" }
 ];
 
 // Auth routes
