@@ -18,7 +18,7 @@ let admins = [
   { id: 2, username: "admin", password: "yiga2023", name: "Admin User", role: "admin" },
   { id: 3, username: "director", password: "program123", name: "Program Director", role: "admin" },
   { id: 4, username: "jeremy.oronje", password: "Jeremy@2024!", name: "Jeremy Oronje", role: "superadmin" },
-  { id: 5, username: "phoebe.monari", password: "Phoebe@2024!", name: "Phoebe Monari", role: "superadmin" },
+  { id: 5, username: "phoebe.monari", password: "Phoebe@2024!", name: "Phoebe Monari", role: "admin" },
   { id: 6, username: "catherine.mbilo", password: "Catherine@2024!", name: "Catherine Mbilo", role: "admin" },
   { id: 7, username: "hilda.koipano", password: "Hilda@2024!", name: "Hilda Koipano", role: "admin" },
   { id: 8, username: "abel.omenge", password: "Abel@2024!", name: "Abel Omenge", role: "admin" },
@@ -214,4 +214,29 @@ app.listen(PORT, () => {
   console.log("?? Program Director: director / program123");
   console.log("?? Sample applications loaded: " + applications.length);
   console.log("?? API available at: http://localhost:" + PORT);
+});
+
+
+// Newsletter subscription
+app.post("/api/subscribe", async (req, res) => {
+  try {
+    const { email, fullName } = req.body;
+
+    // Basic validation
+    if (!email || !email.includes("@")) {
+      return res.status(400).json({ error: "Valid email is required" });
+    }
+
+    // In demo mode, just return success
+    console.log(`?? New subscriber: ${fullName || "Anonymous"} (${email})`);
+    
+    res.json({ 
+      success: true, 
+      message: "Thank you for subscribing!" 
+    });
+
+  } catch (error) {
+    console.error("Subscribe error:", error);
+    res.status(500).json({ error: "Subscription failed" });
+  }
 });
