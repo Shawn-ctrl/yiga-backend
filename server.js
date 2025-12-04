@@ -1,4 +1,4 @@
-﻿const express = require("express");
+const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 
@@ -11,7 +11,7 @@ app.use(express.json());
 // Simple in-memory database for demo
 let applications = [];
 let admins = [
-  { id: 1, username: "superadmin", password: "yiga2023", name: "Super Admin", role: "superadmin" },
+  { id: 1, username: "superadmin", password: "Yiga2023", name: "Super Admin", role: "superadmin" },
   { id: 2, username: "admin", password: "yiga2023", name: "Admin User", role: "admin" },
   { id: 3, username: "director", password: "program123", name: "Program Director", role: "admin" }
 ];
@@ -197,11 +197,11 @@ applications = [
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log("🚀 YIGA Backend running on port " + PORT);
-  console.log("📊 Demo mode - using in-memory database");
-  console.log("🔑 Super Admin: superadmin / yiga2023");
-  console.log("🔑 Admin: admin / yiga2023"); 
-  console.log("🔑 Program Director: director / program123");
-  console.log("📝 Sample applications loaded: " + applications.length);
-  console.log("🌐 API available at: http://localhost:" + PORT);
+  console.log("?? YIGA Backend running on port " + PORT);
+  console.log("?? Demo mode - using in-memory database");
+  console.log("?? Super Admin: superadmin / yiga2023");
+  console.log("?? Admin: admin / yiga2023"); 
+  console.log("?? Program Director: director / program123");
+  console.log("?? Sample applications loaded: " + applications.length);
+  console.log("?? API available at: http://localhost:" + PORT);
 });
