@@ -30,7 +30,7 @@ let admins = [
 
 // Authentication middleware
 function authenticateToken(req, res, next) {
-  const authHeader = req['authorization'];
+  const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
