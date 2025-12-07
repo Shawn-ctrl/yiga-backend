@@ -30,30 +30,21 @@ let admins = [
 
 // Authentication middleware
 function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization'];
+  const authHeader = req['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
     return res.status(401).json({ error: "Access token required" });
   }
 
-  // In demo mode, extract user ID from token
-  // Token format: "demo-token-{userId}"
-  const userId = parseInt(token.replace('demo-token-', ''));
-  const user = admins.find(a => a.id === userId);
-
-  if (!user) {
+  try {
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    return next();
+  } catch (error) {
     return res.status(403).json({ error: "Invalid token" });
   }
-
-  req.user = {
-    id: user.id,
-    username: user.username,
-    name: user.name,
-    role: user.role
-  };
-
-  next();
 }
 
 app.post("/api/auth/login", (req, res) => {
