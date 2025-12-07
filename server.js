@@ -106,8 +106,7 @@ app.get("/api/applications", (req, res) => {
     return res.status(401).json({ message: 'Invalid token' });
   }
   
-  // OLD CODE BELOW - DELETE THIS
-  if (false && !token.includes("demo-token") {
+
     return res.status(401).json({ message: "Unauthorized" });
   }
   
