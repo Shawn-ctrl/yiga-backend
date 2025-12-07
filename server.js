@@ -38,7 +38,8 @@ function authenticateToken(req, res, next) {
   }
 
   // In demo mode, extract user ID from token
-  // JWT token is already decoded in req.user
+  // Token format: "demo-token-{userId}"
+  const userId = parseInt(token.replace('demo-token-', ''));
   const user = admins.find(a => a.id === userId);
 
   if (!user) {
@@ -61,11 +62,7 @@ app.post("/api/auth/login", (req, res) => {
   
   if (admin) {
     const jwt = require('jsonwebtoken');
-    const token = jwt.sign(
-      { userId: admin.id, username: admin.username, role: admin.role },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
-    );
+    const token = jwt.sign({ userId: admin.id, username: admin.username, role: admin.role }, process.env.JWT_SECRET, { expiresIn: '24h' });
     res.json({ 
       token, 
       user: { 
@@ -95,18 +92,7 @@ app.post("/api/applications", (req, res) => {
 app.get("/api/applications", (req, res) => {
   // Simple auth check
   const token = req.headers.authorization;
-  if (!token) return res.status(401).json({ message: 'No token provided' });
-  
-  try {
-    const jwt = require('jsonwebtoken');
-    const decoded = jwt.verify(token.replace('Bearer ', ''), process.env.JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    return res.status(401).json({ message: 'Invalid token' });
-  }
-  
-
+  if (!token || !token.includes("demo-token")) {
     return res.status(401).json({ message: "Unauthorized" });
   }
   
