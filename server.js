@@ -228,7 +228,7 @@ applications = [
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log("?? YIGA Backend running on port " + PORT);
+  console.log("?? YIGA Backend API running on port " + PORT);
   console.log("?? Demo mode - using in-memory database");
   console.log("?? Super Admin: superadmin / yiga2023");
   console.log("?? Admin: admin / yiga2023"); 
