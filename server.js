@@ -26,8 +26,6 @@ let admins = [
   { id: 10, username: "Shawn", password: "Yiga2023", name: "Shawn Ndombi", role: "superadmin" }
 ];
 
-// Auth routes
-
 // Authentication middleware
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
@@ -47,6 +45,7 @@ function authenticateToken(req, res, next) {
   }
 }
 
+// Auth routes
 app.post("/api/auth/login", (req, res) => {
   const { username, password } = req.body;
   const admin = admins.find(a => a.username === username && a.password === password);
@@ -80,13 +79,7 @@ app.post("/api/applications", (req, res) => {
   res.status(201).json({ message: "Application submitted successfully", application });
 });
 
-app.get("/api/applications", (req, res) => {
-  // Simple auth check
-  const token = req.headers.authorization;
-  if (!token || !token.includes("demo-token")) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-  
+app.get("/api/applications", authenticateToken, (req, res) => {
   const { status, search } = req.query;
   let filteredApplications = [...applications];
   
@@ -110,7 +103,7 @@ app.get("/api/applications", (req, res) => {
   });
 });
 
-app.get("/api/applications/stats", (req, res) => {
+app.get("/api/applications/stats", authenticateToken, (req, res) => {
   const pending = applications.filter(a => a.status === "pending").length;
   const approved = applications.filter(a => a.status === "approved").length;
   const rejected = applications.filter(a => a.status === "rejected").length;
@@ -134,7 +127,7 @@ app.get("/api/applications/stats", (req, res) => {
   });
 });
 
-app.put("/api/applications/:id", (req, res) => {
+app.put("/api/applications/:id", authenticateToken, (req, res) => {
   const { status, notes } = req.body;
   const application = applications.find(a => a.id == req.params.id);
   
@@ -148,17 +141,24 @@ app.put("/api/applications/:id", (req, res) => {
 });
 
 // Admin management (super admin only)
-app.get("/api/admins", (req, res) => {
-  const token = req.headers.authorization;
-  if (!req.user || req.user.role !== "superadmin") { // Only super admin (id: 1)
+app.get("/api/admins", authenticateToken, (req, res) => {
+  if (req.user.role !== "superadmin") {
     return res.status(403).json({ message: "Super admin access required" });
   }
-  res.json(admins.filter(admin => admin.id !== 1)); // Don't return super admin itself
+  
+  // Return admins without passwords
+  const adminsList = admins.map(admin => ({
+    id: admin.id,
+    username: admin.username,
+    name: admin.name,
+    role: admin.role
+  }));
+  
+  res.json(adminsList);
 });
 
-app.post("/api/admins", (req, res) => {
-  const token = req.headers.authorization;
-  if (!req.user || req.user.role !== "superadmin") {
+app.post("/api/admins", authenticateToken, (req, res) => {
+  if (req.user.role !== "superadmin") {
     return res.status(403).json({ message: "Super admin access required" });
   }
   
@@ -172,6 +172,72 @@ app.post("/api/admins", (req, res) => {
   };
   admins.push(newAdmin);
   res.status(201).json(newAdmin);
+});
+
+// Dashboard statistics
+app.get("/api/stats", authenticateToken, (req, res) => {
+  try {
+    const stats = {
+      totalApplications: applications.length,
+      pendingApplications: applications.filter(app => app.status === "pending").length,
+      approvedApplications: applications.filter(app => app.status === "approved").length,
+      rejectedApplications: applications.filter(app => app.status === "rejected").length,
+      totalAdmins: admins.length,
+      recentApplications: applications.slice(-5).reverse()
+    };
+    
+    res.json(stats);
+  } catch (error) {
+    console.error("Stats error:", error);
+    res.status(500).json({ error: "Failed to fetch statistics" });
+  }
+});
+
+// Users endpoint (alias for admins list)
+app.get("/api/users", authenticateToken, (req, res) => {
+  try {
+    // Only superadmins can see all users
+    if (req.user.role !== "superadmin") {
+      return res.status(403).json({ error: "Access denied. Superadmin only." });
+    }
+    
+    // Return admins without passwords
+    const users = admins.map(admin => ({
+      id: admin.id,
+      username: admin.username,
+      name: admin.name,
+      role: admin.role
+    }));
+    
+    res.json(users);
+  } catch (error) {
+    console.error("Users error:", error);
+    res.status(500).json({ error: "Failed to fetch users" });
+  }
+});
+
+// Newsletter subscription
+app.post("/api/subscribe", async (req, res) => {
+  try {
+    const { email, fullName } = req.body;
+
+    // Basic validation
+    if (!email || !email.includes("@")) {
+      return res.status(400).json({ error: "Valid email is required" });
+    }
+
+    // In demo mode, just return success
+    console.log(`📧 New subscriber: ${fullName || "Anonymous"} (${email})`);
+    
+    res.json({ 
+      success: true, 
+      message: "Thank you for subscribing!" 
+    });
+
+  } catch (error) {
+    console.error("Subscribe error:", error);
+    res.status(500).json({ error: "Subscription failed" });
+  }
 });
 
 // Health check
@@ -228,80 +294,11 @@ applications = [
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log("?? YIGA Backend API running on port " + PORT);
-  console.log("?? Demo mode - using in-memory database");
-  console.log("?? Super Admin: superadmin / yiga2023");
-  console.log("?? Admin: admin / yiga2023"); 
-  console.log("?? Program Director: director / program123");
-  console.log("?? Sample applications loaded: " + applications.length);
-  console.log("?? API available at: http://localhost:" + PORT);
-});
-
-
-
-// Dashboard statistics
-app.get("/api/stats", authenticateToken, (req, res) => {
-  try {
-    const stats = {
-      totalApplications: applications.length,
-      pendingApplications: applications.filter(app => app.status === "pending").length,
-      approvedApplications: applications.filter(app => app.status === "approved").length,
-      rejectedApplications: applications.filter(app => app.status === "rejected").length,
-      totalAdmins: admins.length,
-      recentApplications: applications.slice(-5).reverse()
-    };
-    
-    res.json(stats);
-  } catch (error) {
-    console.error("Stats error:", error);
-    res.status(500).json({ error: "Failed to fetch statistics" });
-  }
-});
-
-
-// Users endpoint (alias for admins list)
-app.get("/api/users", authenticateToken, (req, res) => {
-  try {
-    // Only superadmins can see all users
-    if (req.user.role !== "superadmin") {
-      return res.status(403).json({ error: "Access denied. Superadmin only." });
-    }
-    
-    // Return admins without passwords
-    const users = admins.map(admin => ({
-      id: admin.id,
-      username: admin.username,
-      name: admin.name,
-      role: admin.role
-    }));
-    
-    res.json(users);
-  } catch (error) {
-    console.error("Users error:", error);
-    res.status(500).json({ error: "Failed to fetch users" });
-  }
-});
-
-// Newsletter subscription
-app.post("/api/subscribe", async (req, res) => {
-  try {
-    const { email, fullName } = req.body;
-
-    // Basic validation
-    if (!email || !email.includes("@")) {
-      return res.status(400).json({ error: "Valid email is required" });
-    }
-
-    // In demo mode, just return success
-    console.log(`?? New subscriber: ${fullName || "Anonymous"} (${email})`);
-    
-    res.json({ 
-      success: true, 
-      message: "Thank you for subscribing!" 
-    });
-
-  } catch (error) {
-    console.error("Subscribe error:", error);
-    res.status(500).json({ error: "Subscription failed" });
-  }
+  console.log("✓ YIGA Backend API running on port " + PORT);
+  console.log("✓ Demo mode - using in-memory database");
+  console.log("✓ Super Admin: superadmin / yiga2023");
+  console.log("✓ Admin: admin / yiga2023"); 
+  console.log("✓ Program Director: director / program123");
+  console.log("✓ Sample applications loaded: " + applications.length);
+  console.log("✓ API available at: http://localhost:" + PORT);
 });
