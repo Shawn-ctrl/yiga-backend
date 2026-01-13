@@ -68,7 +68,7 @@ app.post("/api/auth/login", (req, res) => {
 });
 
 // Application routes
-app.post("/api/applications", authenticateToken, (req, res) => {
+app.post("/api/applications", (req, res) => {
   const application = {
     id: applications.length + 1,
     ...req.body,
