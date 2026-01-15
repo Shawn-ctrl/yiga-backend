@@ -174,6 +174,33 @@ app.post("/api/admins", authenticateToken, (req, res) => {
   res.status(201).json(newAdmin);
 });
 
+// Delete admin
+app.delete("/api/admins/:id", authenticateToken, (req, res) => {
+  try {
+    const { id } = req.params;
+    const adminId = parseInt(id);
+    
+    // Find admin index
+    const index = admins.findIndex(admin => admin.id === adminId);
+    
+    if (index === -1) {
+      return res.status(404).json({ error: "Admin not found" });
+    }
+    
+    // Don't allow deleting yourself
+    if (admins[index].username === req.user.username) {
+      return res.status(400).json({ error: "Cannot delete your own account" });
+    }
+    
+    // Remove admin
+    admins.splice(index, 1);
+    res.json({ message: "Admin deleted successfully" });
+  } catch (error) {
+    console.error("Delete admin error:", error);
+    res.status(500).json({ error: "Failed to delete admin" });
+  }
+});
+
 // Dashboard statistics
 app.get("/api/stats", authenticateToken, (req, res) => {
   try {
