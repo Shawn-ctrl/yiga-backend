@@ -75,13 +75,13 @@ app.post("/api/auth/login", async (req, res) => {
 // Submit application (PUBLIC - no auth)
 app.post("/api/applications", async (req, res) => {
   try {
-    const { fullName, email, phone, country, city, institution, program, motivation, experience } = req.body;
+    const { full_name, email, phone, country, city, institution, program, motivation, experience } = req.body;
 
     const result = await pool.query(
       `INSERT INTO applications (full_name, email, phone, country, city, institution, program, motivation, experience, status)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending')
        RETURNING *`,
-      [fullName, email, phone, country, city, institution, program, motivation, experience]
+      [full_name, email, phone, country, city, institution, program, motivation, experience]
     );
 
     res.status(201).json({
@@ -269,3 +269,4 @@ app.listen(PORT, async () => {
   console.log(`? Using PostgreSQL database`);
   console.log(`? API available at: http://localhost:${PORT}`);
 });
+
