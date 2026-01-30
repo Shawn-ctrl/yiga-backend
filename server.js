@@ -14,8 +14,8 @@ app.use(cors());
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
+    user: 'yigaapplications@gmail.com',
+    pass: 'kqxxkunlnddcfkfd'
   }
 });
 app.use(express.json());
@@ -94,8 +94,8 @@ app.post("/api/applications", async (req, res) => {
 
     // Send email notification
     const mailOptions = {
-      from: process.env.EMAIL_FROM || 'yigaapplications@gmail.com',
-      to: process.env.EMAIL_TO || 'yigaapplications@gmail.com',
+      from: 'YIGA Applications <yigaapplications@gmail.com>',
+      to: 'yigaapplications@gmail.com',
       subject: `New Application: ${full_name}`,
       html: `
         <h2>New Membership Application Received</h2>
@@ -303,6 +303,7 @@ app.listen(PORT, async () => {
   console.log(`? Using PostgreSQL database`);
   console.log(`? API available at: http://localhost:${PORT}`);
 });
+
 
 
 
