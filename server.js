@@ -2,6 +2,7 @@ const express = require("express");
 const nodemailer = require('nodemailer');
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
+const bcrypt = require('bcrypt');
 require("dotenv").config();
 const { pool, initDatabase } = require("./database");
 
