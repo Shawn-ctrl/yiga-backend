@@ -268,6 +268,58 @@ app.delete("/api/admins/:id", authenticateToken, async (req, res) => {
   }
 });
 
+// Delete application (ADMIN ONLY)
+app.delete("/api/applications/:id", authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      "DELETE FROM applications WHERE id = $1 RETURNING *",
+      [req.params.id]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Application not found" });
+    }
+    
+    res.json({ message: "Application deleted successfully" });
+  } catch (error) {
+    console.error("Delete application error:", error);
+    res.status(500).json({ error: "Failed to delete application" });
+  }
+});
+
+// Create admin (SUPER ADMIN ONLY)
+app.post("/api/auth/create-admin", authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'superadmin') {
+      return res.status(403).json({ error: "Only superadmins can create admins" });
+    }
+    
+    const { username, password, role } = req.body;
+    
+    if (!username || !password) {
+      return res.status(400).json({ error: "Username and password required" });
+    }
+    
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    const result = await pool.query(
+      "INSERT INTO admins (username, password, role) VALUES ($1, $2, $3) RETURNING id, username, role",
+      [username, hashedPassword, role || 'admin']
+    );
+    
+    res.status(201).json({
+      message: "Admin created successfully",
+      admin: result.rows[0]
+    });
+  } catch (error) {
+    if (error.code === '23505') {
+      return res.status(400).json({ error: "Username already exists" });
+    }
+    console.error("Create admin error:", error);
+    res.status(500).json({ error: "Failed to create admin" });
+  }
+});
+
 // Newsletter subscription
 app.post("/api/subscribe", async (req, res) => {
   try {
