@@ -10,6 +10,14 @@ const JWT_SECRET = process.env.JWT_SECRET || "yiga-secret-key-2025-production";
 
 // Middleware
 app.use(cors());
+// Email configuration
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
 app.use(express.json());
 
 // Initialize database on startup
@@ -83,6 +91,32 @@ app.post("/api/applications", async (req, res) => {
        RETURNING *`,
       [full_name, email, phone, country, city, institution, program, motivation, experience]
     );
+
+    // Send email notification
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || 'yigaapplications@gmail.com',
+      to: process.env.EMAIL_TO || 'yigaapplications@gmail.com',
+      subject: `New Application: ${full_name}`,
+      html: `
+        <h2>New Membership Application Received</h2>
+        <p><strong>Name:</strong> ${full_name}</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Phone:</strong> ${phone}</p>
+        <p><strong>Country:</strong> ${country}</p>
+        <p><strong>City:</strong> ${city || 'Not provided'}</p>
+        <p><strong>Institution:</strong> ${institution || 'Not provided'}</p>
+        <p><strong>Program:</strong> ${program}</p>
+        <p><strong>Motivation:</strong></p>
+        <p>${motivation}</p>
+        <p><strong>Experience:</strong></p>
+        <p>${experience || 'Not provided'}</p>
+        <hr>
+        <p><small>Login to admin panel to review: https://yiga-website.vercel.app/?page=admin</small></p>
+      `
+    };
+
+    // Send email (don't wait for it)
+    transporter.sendMail(mailOptions).catch(err => console.error('Email error:', err));
 
     res.status(201).json({
       message: "Application submitted successfully",
@@ -269,4 +303,6 @@ app.listen(PORT, async () => {
   console.log(`? Using PostgreSQL database`);
   console.log(`? API available at: http://localhost:${PORT}`);
 });
+
+
 
